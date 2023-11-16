@@ -1,0 +1,33 @@
+From 3e238ab125769644f03f38680e23d242069e7a06 Mon Sep 17 00:00:00 2001
+From: Yuxuan Shui <yshuiv7@gmail.com>
+Date: Wed, 15 Nov 2023 15:26:49 +0000
+Subject: [PATCH] [d3d11] Fix race in WaitForResource.
+
+---
+ src/d3d11/d3d11_context_imm.cpp | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/d3d11/d3d11_context_imm.cpp b/src/d3d11/d3d11_context_imm.cpp
+index 466e9a96743..681ad45bd4c 100644
+--- a/src/d3d11/d3d11_context_imm.cpp
++++ b/src/d3d11/d3d11_context_imm.cpp
+@@ -872,6 +872,7 @@ namespace dxvk {
+         // We don't have to wait, but misbehaving games may
+         // still try to spin on `Map` until the resource is
+         // idle, so we should flush pending commands
++        D3D10DeviceLock lock = LockContext();
+         ConsiderFlush(GpuFlushType::ImplicitSynchronization);
+         return false;
+       }
+@@ -879,7 +880,10 @@ namespace dxvk {
+       if (isInUse) {
+         // Make sure pending commands using the resource get
+         // executed on the the GPU if we have to wait for it
+-        ExecuteFlush(GpuFlushType::ImplicitSynchronization, nullptr, false);
++        {
++          D3D10DeviceLock lock = LockContext();
++          ExecuteFlush(GpuFlushType::ImplicitSynchronization, nullptr, false);
++        }
+         SynchronizeCsThread(SequenceNumber);
+ 
+         m_device->waitForResource(Resource, access);

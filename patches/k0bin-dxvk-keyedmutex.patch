@@ -1,0 +1,49 @@
+From 6e82040c7434c92b20d461699b027a232462926f Mon Sep 17 00:00:00 2001
+From: Robin Kertels <robin.kertels@gmail.com>
+Date: Wed, 15 Nov 2023 16:51:30 +0100
+Subject: [PATCH] [d3d11] Lock context in KeyedMutex::ReleaseSync
+
+Co-authored-by: Yuxuan Shui <yshuiv7@gmail.com>
+---
+ src/d3d11/d3d11_context_imm.h |  4 ++++
+ src/d3d11/d3d11_resource.cpp  | 12 +++++++++++-
+ 2 files changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/src/d3d11/d3d11_context_imm.h b/src/d3d11/d3d11_context_imm.h
+index eb3ed88f085..3e68325000e 100644
+--- a/src/d3d11/d3d11_context_imm.h
++++ b/src/d3d11/d3d11_context_imm.h
+@@ -89,6 +89,10 @@ namespace dxvk {
+     void SynchronizeCsThread(
+             uint64_t                          SequenceNumber);
+ 
++    D3D10Multithread& GetMultithread() {
++        return m_multithread;
++    }
++
+     D3D10DeviceLock LockContext() {
+       return m_multithread.AcquireLock();
+     }
+diff --git a/src/d3d11/d3d11_resource.cpp b/src/d3d11/d3d11_resource.cpp
+index db3c0f10c5e..adc5b444a39 100644
+--- a/src/d3d11/d3d11_resource.cpp
++++ b/src/d3d11/d3d11_resource.cpp
+@@ -111,7 +111,17 @@ namespace dxvk {
+     D3D11CommonTexture* texture = GetCommonTexture(m_resource);
+     Rc<DxvkDevice> dxvkDevice = m_device->GetDXVKDevice();
+ 
+-    m_device->GetContext()->WaitForResource(texture->GetImage(), DxvkCsThread::SynchronizeAll, D3D11_MAP_READ_WRITE, 0);
++    {
++      D3D11ImmediateContext* context = m_device->GetContext();
++      D3D10Multithread& multithread = context->GetMultithread();
++      static bool s_errorShown = false;
++
++      if (!multithread.GetMultithreadProtected() && !std::exchange(s_errorShown, true))
++        Logger::warn("D3D11DXGIKeyedMutex::ReleaseSync: Called without context locking enabled.");
++
++      D3D10DeviceLock lock = context->LockContext();
++      context->WaitForResource(texture->GetImage(), DxvkCsThread::SynchronizeAll, D3D11_MAP_READ_WRITE, 0);
++    }
+ 
+     return dxvkDevice->vkd()->wine_vkReleaseKeyedMutex(dxvkDevice->handle(), texture->GetImage()->memory().memory(), Key) == VK_SUCCESS
+       ? S_OK

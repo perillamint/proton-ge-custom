@@ -372,3 +372,7 @@
 
 ### END PROTON-GE ADDITIONAL CUSTOM PATCHES ###
 ### END WINE PATCHING ###
+
+cd ..
+cd dxvk
+patch -Np1 < ../patches/k0bin-dxvk-keyedmutex.patch
